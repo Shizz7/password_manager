@@ -1,112 +1,166 @@
+import json
+import os
+import base64
+import hashlib
 from tkinter import *
 from tkinter import messagebox
 from random import choice, randint, shuffle
+from cryptography.fernet import Fernet
 import pyperclip
-import json
+
+# Constants
+MASTER_HASH_FILE = "master.hash"
+DATA_FILE = "data.json"
+KEY_FILE = "key.key"
+
+# ---------------------------- SECURITY SETUP ------------------------------- #
+def get_fernet():
+    if not os.path.exists(KEY_FILE):
+        key = Fernet.generate_key()
+        with open(KEY_FILE, "wb") as f:
+            f.write(key)
+    else:
+        with open(KEY_FILE, "rb") as f:
+            key = f.read()
+    return Fernet(key)
+
+fernet = get_fernet()
+
+def hash_master_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def authenticate():
+    if not os.path.exists(MASTER_HASH_FILE):
+        def set_password():
+            pwd = entry.get()
+            if len(pwd) < 4:
+                messagebox.showerror("Weak", "Use a longer password")
+                return
+            with open(MASTER_HASH_FILE, "w") as f:
+                f.write(hash_master_password(pwd))
+            auth_window.destroy()
+
+        auth_window = Tk()
+        auth_window.title("Set Master Password")
+        Label(auth_window, text="Set Master Password:").pack()
+        entry = Entry(auth_window, show="*")
+        entry.pack()
+        Button(auth_window, text="Set", command=set_password).pack()
+        auth_window.mainloop()
+    else:
+        def verify_password():
+            pwd = entry.get()
+            with open(MASTER_HASH_FILE, "r") as f:
+                saved_hash = f.read()
+            if saved_hash == hash_master_password(pwd):
+                auth_window.destroy()
+            else:
+                messagebox.showerror("Incorrect", "Wrong master password")
+
+        auth_window = Tk()
+        auth_window.title("Enter Master Password")
+        Label(auth_window, text="Enter Master Password:").pack()
+        entry = Entry(auth_window, show="*")
+        entry.pack()
+        Button(auth_window, text="Login", command=verify_password).pack()
+        auth_window.mainloop()
+
+# ---------------------------- DATA LOAD/SAVE ------------------------------- #
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE, "rb") as f:
+        encrypted = f.read()
+    decrypted = fernet.decrypt(encrypted)
+    return json.loads(decrypted)
+
+def save_data(data):
+    encrypted = fernet.encrypt(json.dumps(data).encode())
+    with open(DATA_FILE, "wb") as f:
+        f.write(encrypted)
 
 # ---------------------------- PASSWORD GENERATOR ------------------------------- #
-
-#Password Generator Project
 def generate_password():
-    letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
-    numbers = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-    symbols = ['!', '#', '$', '%', '&', '(', ')', '*', '+']
-
-    password_letters = [choice(letters) for _ in range(randint(8, 10))]
-    password_symbols = [choice(symbols) for _ in range(randint(2, 4))]
-    password_numbers = [choice(numbers) for _ in range(randint(2, 4))]
-
-    password_list = password_letters + password_symbols + password_numbers
+    letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    numbers = '0123456789'
+    symbols = '!#$%&()*+'
+    password_list = [choice(letters) for _ in range(randint(8, 10))] + \
+                    [choice(symbols) for _ in range(randint(2, 4))] + \
+                    [choice(numbers) for _ in range(randint(2, 4))]
     shuffle(password_list)
-
     password = "".join(password_list)
+    password_entry.delete(0, END)
     password_entry.insert(0, password)
     pyperclip.copy(password)
 
 # ---------------------------- SAVE PASSWORD ------------------------------- #
-def save():
-
+def add_password():
     website = website_entry.get()
     email = email_entry.get()
     password = password_entry.get()
-    new_website = {
-        website:{
+
+    if not website or not password:
+        messagebox.showerror("Oops", "Website and password cannot be empty.")
+        return
+
+    new_data = {
+        website: {
             "email": email,
-            "password": password,
-        } 
+            "password": password
+        }
     }
 
-    if len(website) == 0 or len(password) == 0:
-        messagebox.showinfo(title="Oops", message="Please make sure you haven't left any fields empty.")
-    else:
-        try:
-            with open("data.json", "r") as data_file_r:
-             data = json.load(data_file_r)
-        except FileNotFoundError:
-            with open("data.json", "w") as data_file_w:
-            #saving the updated data
-                json.dump(new_website, data_file_w, indent=4)
-        else:
-             data.update(new_website)        
-             with open("data.json", "w") as data_file_w:
-                 #saving the updated data
-                 json.dump(data, data_file_w, indent=4)
-                 website_entry.delete(0, END)
-                 password_entry.delete(0, END)
-        finally:        
-            website_entry.delete(0, END)
-            password_entry.delete(0, END)   
+    try:
+        data = load_data()
+    except Exception as e:
+        data = {}
 
-# --------------------------- Find Password ---------------------------#
+    data.update(new_data)
+    save_data(data)
+    website_entry.delete(0, END)
+    password_entry.delete(0, END)
+
+# ---------------------------- FIND PASSWORD ------------------------------- #
 def find_password():
     website = website_entry.get()
     try:
-        with open("data.json") as data_file:
-            data = json.load(data_file)
-    except FileNotFoundError:
-        messagebox.showinfo(title="Error", message= "No Data File Found")
-    else:
-        if website in data:
-            email = data[website]["email"]
-            password = data[website]["password"] 
-            messagebox.showinfo(title=website, message= f"Email: {email}\nPassword: {password}") 
-        else:
-            messagebox.showinfo(title="Error", message=f"{website}, doesn't exist in password manager")
+        data = load_data()
+    except:
+        messagebox.showerror("Error", "No data file found or file is corrupted.")
+        return
 
-#--------------------------- Edit -------------------------------------#
-def edit():
+    if website in data:
+        messagebox.showinfo(website, f"Email: {data[website]['email']}\nPassword: {data[website]['password']}")
+    else:
+        messagebox.showerror("Not Found", f"No details for {website}")
+
+# ---------------------------- EDIT PASSWORD ------------------------------- #
+def edit_password():
     website = website_entry.get()
     email = email_entry.get()
     password = password_entry.get()
-    new_website = {
-        website:{
-            "email": email,
-            "password": password,
-        } 
-    }
+
     try:
-        with open("data.json", "r") as data_file:
-            data = json.load(data_file)
-    except FileNotFoundError:
-        with open("data.json", "w") as data_file_w:
-            #saving the updated data
-                json.dump(new_website, data_file_w, indent=4)
+        data = load_data()
+    except:
+        messagebox.showerror("Error", "Cannot read data.")
+        return
+
+    if website in data:
+        data[website] = {
+            "email": email,
+            "password": password
+        }
+        save_data(data)
+        messagebox.showinfo("Success", "Password updated.")
     else:
-        if website in data:
-            data[website]["email"] = email
-            data[website]["password"] = password
-        else:
-            messagebox.showerror(title = "Error", message = f"No website of name {website} is found\n if you want to add please hit add button")                   
-        data.update(data)
-        with open("data.json", "w") as data_file_w:
-            json.dump(data, data_file_w, indent=4)    
-    finally:         
-        website_entry.delete(0, END)
-        password_entry.delete(0, END)  
+        messagebox.showerror("Error", f"{website} not found")
 
-
+    website_entry.delete(0, END)
+    password_entry.delete(0, END)
 
 # ---------------------------- UI SETUP ------------------------------- #
+authenticate()
 
 window = Tk()
 window.title("Password Manager")
@@ -117,32 +171,24 @@ logo_img = PhotoImage(file="logo.png")
 canvas.create_image(100, 100, image=logo_img)
 canvas.grid(row=0, column=1)
 
-#Labels
-website_label = Label(text="Website:")
-website_label.grid(row=1, column=0)
-email_label = Label(text="Email/Username:")
-email_label.grid(row=2, column=0)
-password_label = Label(text="Password:")
-password_label.grid(row=3, column=0)
+Label(text="Website:").grid(row=1, column=0)
+Label(text="Email/Username:").grid(row=2, column=0)
+Label(text="Password:").grid(row=3, column=0)
 
-#Entries
 website_entry = Entry(width=21)
 website_entry.grid(row=1, column=1)
 website_entry.focus()
+
 email_entry = Entry(width=35)
 email_entry.grid(row=2, column=1, columnspan=2)
-email_entry.insert(0, "kshitijbhoga@gmai.com")
+email_entry.insert(0, "your_email@example.com")
+
 password_entry = Entry(width=21)
 password_entry.grid(row=3, column=1)
 
-# Buttons
-generate_password_button = Button(text="Generate Password", command=generate_password)
-generate_password_button.grid(row=3, column=2)
-add_button = Button(text="Add", width=36, command=save)
-add_button.grid(row=4, column=1, columnspan=2)
-edit_button = Button (text="Edit", width = 36, command=edit)
-edit_button.grid(row=5, column=1, columnspan=2)
-search_button = Button(text ="Search", width=13, command=find_password)
-search_button.grid(row = 1, column=2)
+Button(text="Generate Password", command=generate_password).grid(row=3, column=2)
+Button(text="Add", width=36, command=add_password).grid(row=4, column=1, columnspan=2)
+Button(text="Edit", width=36, command=edit_password).grid(row=5, column=1, columnspan=2)
+Button(text="Search", width=13, command=find_password).grid(row=1, column=2)
 
 window.mainloop()
