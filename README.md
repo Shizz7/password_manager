@@ -4,7 +4,9 @@ Password Manager
 
 This is a simple and effective password manager built with Python. It features an easy-to-use graphical interface using Tkinter and allows users to securely manage their website credentials. You can add, search, edit, and even generate strong passwords, all of which are stored locally in a JSON file.
 
-Key Features
+
+KEY FEATURES
+
 1. Clean and interactive user interface built with Tkinter
 
 2. Add new login credentials (website, email/username, password)
@@ -23,7 +25,9 @@ Key Features
 
 9. Gracefully handles missing or corrupt files and unexpected errors
 
-Technologies Used
+
+TECHNOLOGIES USED
+
 1. Python 3
 
 2. Tkinter for building the GUI
@@ -34,7 +38,8 @@ Technologies Used
 
 5. Pyperclip for copying passwords to clipboard
 
-How to Use
+
+HOW TO USE
 
 Run the application.
 
@@ -50,7 +55,8 @@ You can also edit any existing entry if needed.
 
 All saved data is stored in a data.json file located in the same directory as the script.
 
-Input Validation and Error Handling
+
+INPUT VALIDATION AND ERROR HANDLING
 
 If any input field is left empty, the program will prompt the user to fill it.
 
